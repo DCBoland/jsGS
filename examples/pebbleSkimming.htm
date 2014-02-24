@@ -1,0 +1,127 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+<script src="../jsGS.js"></script>
+</head>
+
+<body>
+    <input type="file" id="file" name="file" multiple>
+    <button id="readFile">Read File</button>
+    <span id="status"></span>
+    <button id="play">Play</button>
+    <li>acceleration x: <span id="accelerationX"></span>g</li>
+    <li>acceleration y: <span id="accelerationY"></span>g</li>
+    <li>Shakey: <span id="shakey"></span>g</li>
+    <li>Shaken: <span id="shaken">False</span></li>
+    <script>
+        var bufs = [];
+        var grains = []
+        var grainid = 0;
+        var playbufid = -1;
+        var nextSongID = 0;
+        var f;
+        var ax = 0;
+        var ay = 0;
+        
+        var playbackObj;
+        var pos = 0;
+        
+        var shakey = 0;
+        var paused = false;
+               
+        function readFile() 
+        {
+            console.log("File load attempt..");
+            /* Get the reference of the input element. */
+            var files = document.getElementById('file').files;
+            console.log(files);
+            for (i = 0; i < files.length; i++){
+                f = files[i];
+                addAudioFromFile(f, bufs);
+                document.getElementById("status").innerHTML = bufs.length;
+            }
+            console.log(f);
+        }
+        
+        function checkShaking() {
+            a = Math.sqrt(ax*ax + ay*ay);
+            // Add low pass filter
+            //if (shakey > 6) test = -test;
+            shakey = shakey + 0.2*(a-shakey);
+            if (shakey > 7) {
+                shakey = 8;
+            }
+            document.getElementById("shakey").innerHTML = shakey;
+            if (shakey > 5 && playbackObj.playing){
+                console.log('stopping music...');
+                playbackObj.source.onended = undefined;
+                pos = playbackObj.stop(1);
+                console.log(pos);
+                document.getElementById("shaken").innerHTML = "True";
+                
+                nextSongID = playbufid;
+                //setTimeout(playFutureGrain,1);
+                playFutureGrain();
+            }
+            else if (shakey < 4 && playbackObj != undefined && playbackObj.playing == false){
+                console.log("Unpausing");
+                playSound();
+                document.getElementById("shaken").innerHTML = "False";
+            }
+        }
+        
+        function playFutureGrain(){
+            if (++nextSongID >= bufs.length) nextSongID = 0;
+            var grainbuf = bufs[nextSongID];
+            grains[grainid++] = new playGrain(grainbuf, (Math.random()*0.5 + 0.25) * grainbuf.duration, 0.7, 0.5, 0.5, 1, 1);
+            if (grainid > 3) {
+                grainid = 0;
+            }
+            setTimeout(function(){
+		if (shakey > 4){
+                    playFutureGrain();
+                }
+            },1000);
+        }
+        
+        // Play Function
+        function playSound() {
+            if (ready == false){
+                    return;
+            }
+            if (pos == 0 && ++playbufid >= bufs.length) playbufid = 0;
+            
+            if (playbackObj != undefined && playbackObj.playing) {
+                console.log("still have a playobj");
+                playbackObj.source.onended = undefined;
+                playbackObj.stop(2);
+            }
+            
+            console.log("Started " + playbufid);
+            playbackObj = new playBuffer(bufs[playbufid], 1, 2, pos, 0.7);
+            playbackObj.source.onended = function(e){
+                console.log("Finished " + playbufid);
+                pos = 0;
+                playSound();
+            }
+        }
+        
+        document.getElementById('readFile').addEventListener('click', function(event) {
+            readFile();    
+        }, false);
+        
+        // Trigger Event for the Play Button
+        document.getElementById('play').addEventListener('click', playSound);
+        
+        window.onload = function(){
+            setInterval(checkShaking,200);
+            window.ondevicemotion = function(event) {
+                ax = event.acceleration.x;
+                ay = event.acceleration.y;
+                document.getElementById("accelerationX").innerHTML = event.acceleration.x;
+                document.getElementById("accelerationY").innerHTML = event.acceleration.y;
+            };
+        }
+    </script>
+</body>
+</html>

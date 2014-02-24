@@ -1,0 +1,209 @@
+<!doctype html>
+<html>
+	<head>
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<meta http-equiv="X-UA-Compatible" content="chrome=1">
+		<meta http-equiv="Content-Type" content="text/html; charset = UTF-8" />
+		<title>WebShoogle</title>
+		<style>
+			body {
+				overflow: hidden;
+				font-family: helvetica, arial, sans serif;
+				<!-- background-color: #000000;-->
+
+				user-select: none;
+				-webkit-user-select: none;
+				-moz-user-select: none;
+				-o-user-select: none;
+				-ms-user-select: none;
+			}
+			span
+			{
+			    white-space:nowrap;
+			}
+			#sphere {
+				position: absolute;	
+				width: 50px;
+				height: 50px;
+				border-radius: 50px;
+				-webkit-radius: 50px;
+				
+				background: linear-gradient(top,  rgba(187,187,187,1) 0%,rgba(119,119,119,1) 99%);
+				box-shadow: inset 0 -5px 15px rgba(255,255,255,0.4), 
+					    inset -2px -1px 40px rgba(0,0,0,0.4),
+					    0 0 1px #000;
+				}
+			.controls {
+			    width: 150px;
+			    clear: both;
+			}
+			.controls input {
+			    width: 100%;
+			    clear: both;
+			}
+		</style>
+		<script src="../jsGS.js"></script>
+	</head> 
+
+	<body>
+
+	<div id="sphere"></div>
+	<li>acceleration x: <span id="accelerationX"></span>g</li>
+	<li>acceleration y: <span id="accelerationY"></span>g</li>
+
+	<div class="controls">
+		<label>spring k: </label>
+		<input Id="k_in" style="margin: 0pt auto;" type="text" value=5 />
+		<label>coef. of restitution: </label>
+		<input Id="elastic_in" style="margin: 0pt auto;" type="text" value=0.6 />
+		<label>damping coef.: </label>
+		<input Id="kfric_in" style="margin: 0pt auto;" type="text" value=0.5 />
+		<label>mass: </label>
+		<input Id="mass_in" style="margin: 0pt auto;" type="text" value=1 />
+	</div>
+	
+	<script>		
+	rk4 = function (x, v, a, afunc, dt) {
+	  // Returns final (position, velocity) array after time dt has passed.
+	  //        x: initial position
+	  //        v: initial velocity
+	  //        a: acceleration function a(x,v,a,dt) (must be callable)
+	  //        dt: timestep
+	  var x1 = x;
+	  var v1 = v;
+	  var a1 = afunc(x1, v1, a, 0);
+	 
+	  var x2 = x + 0.5*v1*dt;
+	  var v2 = v + 0.5*a1*dt;
+	  var a2 = afunc(x2, v2, a, dt/2);
+	 
+	  var x3 = x + 0.5*v2*dt;
+	  var v3 = v + 0.5*a2*dt;
+	  var a3 = afunc(x3, v3, a, dt/2);
+	 
+	  var x4 = x + v3*dt;
+	  var v4 = v + a3*dt;
+	  var a4 = afunc(x4, v4, a, dt);
+	 
+	  var xf = x + (dt/6)*(v1 + 2*v2 + 2*v3 + v4);
+	  var vf = v + (dt/6)*(a1 + 2*a2 + 2*a3 + a4);
+	 
+	  return [xf, vf];
+	}
+	
+	doVoice = function() {
+		if (++grainid >= grainlim) grainid = 0;
+		grainbuf = buffers[0];
+		grains[grainid] = new playGrain(grainbuf, Math.random()* grainbuf.duration, 0.7, 0.3, 0.1, 1, 0.2);
+	}
+	
+	updateSim = function() {
+		springcoef = parseFloat(document.getElementById('k_in').value);
+		if (isNaN(springcoef)) springcoef = 0;
+		
+		elasticcoef = parseFloat(document.getElementById('elastic_in').value);
+		if (isNaN(elasticcoef)) elasticcoef = 0;
+		else if (elasticcoef > 1) {
+			document.getElementById('elastic_in').value = 1;
+			elasticcoef = 1;
+		}
+		
+		kfriccoef = parseFloat(document.getElementById('kfric_in').value);
+		if (isNaN(kfriccoef)) kfriccoef = 0;
+		
+		mass = parseFloat(document.getElementById('mass_in').value);
+		if (isNaN(mass) || mass == 0) mass = 1;
+		
+		// Add stiction?
+		xv = rk4(xv[0], xv[1], ax, addSpringAccel, 0.01);
+		yv = rk4(yv[0], yv[1], ay, addSpringAccel, 0.01);
+		
+		setTimeout(updateSim,delay);
+		
+		// Add Schmitt trigger to prevent getting stuck on wrong side of border	
+		if (xv[0] < borders[0]) {
+			xv[0] = borders[0];
+			xv[1] = -elasticcoef*xv[1];
+			if (Math.abs(xv[1]) > impactthresh && navigator.vibrate) {
+				// vibration API supported
+				doVoice();
+				navigator.vibrate(vibtime);
+			}
+		}
+		else if (xv[0] > borders[1]) {
+			xv[0] = borders[1];
+			xv[1] = -elasticcoef*xv[1];
+			if (Math.abs(xv[1]) > impactthresh && navigator.vibrate) {
+				// vibration API supported
+				doVoice();
+				navigator.vibrate(vibtime);
+			}				
+		}
+		if (yv[0] < borders[2]) {
+			yv[0] = borders[2];
+			yv[1] = -elasticcoef*yv[1];
+			if (Math.abs(yv[1]) > impactthresh && navigator.vibrate) {
+				// vibration API supported
+				doVoice();
+				navigator.vibrate(vibtime);
+			}				
+		}
+		else if (yv[0] > borders[3]) {
+			yv[0] = borders[3];
+			yv[1] = -elasticcoef*yv[1];
+			if (Math.abs(yv[1]) > impactthresh && navigator.vibrate) {
+				// vibration API supported
+				doVoice();
+				navigator.vibrate(vibtime);
+			}				
+		}
+		
+		sphere.style.top = origin[1] - yv[0] - 25 + "px";
+		sphere.style.left = origin[0] + xv[0] - 25 + "px";
+	}
+	
+	addSpringAccel = function(x, v, a, dt) {
+		return -(springcoef*x+kfriccoef*v)/mass-a;
+	};
+	
+	navigator.vibrate = navigator.vibrate || navigator.webkitVibrate || navigator.mozVibrate || navigator.msVibrate;
+
+	var buffers = [];
+	var bufid = 0;
+	var grains = [];
+	var grainid = 0;
+	var grainlim = 10;
+	
+	var lim = [window.innerWidth, window.innerHeight];
+	var xv = [0,500]
+	var yv = [0,0]
+	var ax = 0, ay = 0;
+	var origin = [lim[0]/2,lim[1]/2];
+	var borders = [-lim[0]/2,lim[0]/2,-lim[1]/2,lim[1]/2];
+	console.log(lim);
+	
+	var sphere = document.getElementById("sphere");
+
+	var delay = 1;
+	var vibtime = 20;
+	var kfriccoef = 0.5
+	var elasticcoef = 0.6
+	var springcoef = 0.5
+	var impactthresh = 200
+	var mass = 1
+	
+	window.onload = function() {
+		// Acceleration
+		addAudioFromURI("audio.mp3", buffers);
+		
+		window.ondevicemotion = function(event) {
+	    		ax = event.accelerationIncludingGravity.x*500;
+	    		ay = event.accelerationIncludingGravity.y*500;
+			document.getElementById("accelerationX").innerHTML = event.accelerationIncludingGravity.x;
+			document.getElementById("accelerationY").innerHTML = event.accelerationIncludingGravity.y;
+	    	};
+		setTimeout(updateSim, delay);
+	};
+	</script>
+	</body>
+</html>
